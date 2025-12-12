@@ -1,56 +1,106 @@
+import random
 import streamlit as st
-from openai import OpenAI
+from typing import List, Dict
 
-# Show title and description.
-st.title("💬 Chatbot")
-st.write(
-    "This is a simple chatbot that uses OpenAI's GPT-3.5 model to generate responses. "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
-    "You can also learn how to build this app step by step by [following our tutorial](https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps)."
-)
 
-# Ask user for their OpenAI API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
-openai_api_key = st.text_input("OpenAI API Key", type="password")
-if not openai_api_key:
-    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
-else:
+st.set_page_config(page_title="🛒 마트 계산 대장", layout="centered")
+st.title("🛒 마트 계산 대장")
+st.write("초등학생을 위한 마트 계산 놀이입니다. 상품을 보고 총 금액을 계산해보세요!")
 
-    # Create an OpenAI client.
-    client = OpenAI(api_key=openai_api_key)
+# 1) 데이터 설정: 상품 목록
+PRODUCTS: List[Dict] = [
+    {"name": "사과", "price": 500, "emoji": "🍎"},
+    {"name": "우유", "price": 1000, "emoji": "🥛"},
+    {"name": "과자", "price": 1500, "emoji": "🍪"},
+    {"name": "아이스크림", "price": 800, "emoji": "🍦"},
+    {"name": "바나나", "price": 300, "emoji": "🍌"},
+    {"name": "주스", "price": 1200, "emoji": "🧃"},
+]
 
-    # Create a session state variable to store the chat messages. This ensures that the
-    # messages persist across reruns.
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
 
-    # Display the existing chat messages via `st.chat_message`.
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+# 2) 세션 상태 초기화
+def init_session():
+    if "current_items" not in st.session_state:
+        st.session_state.current_items = []
+    if "current_answer" not in st.session_state:
+        st.session_state.current_answer = None
+    if "score" not in st.session_state:
+        st.session_state.score = 0
+    if "total_correct" not in st.session_state:
+        st.session_state.total_correct = 0
+    if "answered" not in st.session_state:
+        st.session_state.answered = False
+    if "user_input" not in st.session_state:
+        st.session_state.user_input = 0
 
-    # Create a chat input field to allow the user to enter a message. This will display
-    # automatically at the bottom of the page.
-    if prompt := st.chat_input("What is up?"):
 
-        # Store and display the current prompt.
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+init_session()
 
-        # Generate a response using the OpenAI API.
-        stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages
-            ],
-            stream=True,
-        )
 
-        # Stream the response to the chat using `st.write_stream`, then store it in 
-        # session state.
-        with st.chat_message("assistant"):
-            response = st.write_stream(stream)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+def generate_problem():
+    # pick 2 or 3 random products
+    count = random.choice([2, 3])
+    items = random.sample(PRODUCTS, k=count)
+    total = sum(item["price"] for item in items)
+    st.session_state.current_items = items
+    st.session_state.current_answer = total
+    st.session_state.answered = False
+    st.session_state.user_input = 0
+
+
+# If no problem exists yet, generate one
+if not st.session_state.current_items:
+    generate_problem()
+
+
+# 3) UI 레이아웃: 문제 출제 영역
+st.subheader("📦 문제 출제")
+cols = st.columns(len(st.session_state.current_items))
+for col, item in zip(cols, st.session_state.current_items):
+    with col:
+        st.markdown(f"<div style='text-align:center; padding:10px; border:1px solid #eee; border-radius:8px;'>"
+                    f"<div style='font-size:40px'>{item['emoji']}</div>"
+                    f"<div style='font-weight:600'>{item['name']}</div>"
+                    f"<div style='color:#555'>{item['price']}원</div>"
+                    f"</div>", unsafe_allow_html=True)
+
+
+# 4) 계산대 영역
+st.subheader("🧾 계산대")
+st.write("총 금액은 얼마인가요?")
+user_answer = st.number_input("금액 입력 (원)", min_value=0, value=int(st.session_state.user_input), step=100, key="money_input")
+
+col_check, col_next = st.columns(2)
+with col_check:
+    if st.button("정답 확인"):
+        if st.session_state.current_answer is None:
+            st.warning("먼저 문제를 생성해 주세요.")
+        else:
+            # compare integers
+            try:
+                if int(user_answer) == int(st.session_state.current_answer):
+                    st.success("정답입니다! 🎉")
+                    st.balloons()
+                    st.session_state.score += 1
+                    st.session_state.total_correct += 1
+                    st.session_state.answered = True
+                else:
+                    st.error("아쉬워요, 다시 계산해볼까요?")
+            except Exception:
+                st.error("숫자를 올바르게 입력해주세요.")
+
+with col_next:
+    if st.button("다음 손님 받기(새 문제)"):
+        generate_problem()
+
+
+# 5) 사이드바: 현재 점수 및 누적 정답 횟수
+with st.sidebar:
+    st.header("게임 정보")
+    st.metric("현재 점수", st.session_state.score)
+    st.metric("누적 정답 횟수", st.session_state.total_correct)
+    st.markdown("---")
+    st.caption("답을 제출하기 전까지는 문제가 유지됩니다.")
+
+st.markdown("---")
+st.caption("즐겁게 계산 놀이를 해보세요!")
