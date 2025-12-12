@@ -1,106 +1,106 @@
 import random
+import os
+import time
+import re
 import streamlit as st
-from typing import List, Dict
+import openai
 
 
-st.set_page_config(page_title="🛒 마트 계산 대장", layout="centered")
-st.title("🛒 마트 계산 대장")
-st.write("초등학생을 위한 마트 계산 놀이입니다. 상품을 보고 총 금액을 계산해보세요!")
+st.set_page_config(page_title="🤖 덜렁이 로봇의 수학 숙제 도와주기", layout="centered")
 
-# 1) 데이터 설정: 상품 목록
-PRODUCTS: List[Dict] = [
-    {"name": "사과", "price": 500, "emoji": "🍎"},
-    {"name": "우유", "price": 1000, "emoji": "🥛"},
-    {"name": "과자", "price": 1500, "emoji": "🍪"},
-    {"name": "아이스크림", "price": 800, "emoji": "🍦"},
-    {"name": "바나나", "price": 300, "emoji": "🍌"},
-    {"name": "주스", "price": 1200, "emoji": "🧃"},
-]
+st.markdown(
+    """
+<style>
+body { background: linear-gradient(135deg, #fff8e6 0%, #f0fbff 100%);} 
+.stApp { color: #333; }
+</style>
+""",
+    unsafe_allow_html=True,
+)
 
+st.title("🤖 덜렁이 로봇의 수학 숙제 도와주기")
+st.write("덜렁이와 대화를 하면서 수학을 연습해보세요 — 친근한 말투와 이모지가 많아요! 🤖😅✨")
 
-# 2) 세션 상태 초기화
-def init_session():
-    if "current_items" not in st.session_state:
-        st.session_state.current_items = []
-    if "current_answer" not in st.session_state:
-        st.session_state.current_answer = None
-    if "score" not in st.session_state:
-        st.session_state.score = 0
-    if "total_correct" not in st.session_state:
-        st.session_state.total_correct = 0
-    if "answered" not in st.session_state:
-        st.session_state.answered = False
-    if "user_input" not in st.session_state:
-        st.session_state.user_input = 0
-
-
-init_session()
-
-
-def generate_problem():
-    # pick 2 or 3 random products
-    count = random.choice([2, 3])
-    items = random.sample(PRODUCTS, k=count)
-    total = sum(item["price"] for item in items)
-    st.session_state.current_items = items
-    st.session_state.current_answer = total
-    st.session_state.answered = False
-    st.session_state.user_input = 0
-
-
-# If no problem exists yet, generate one
-if not st.session_state.current_items:
-    generate_problem()
-
-
-# 3) UI 레이아웃: 문제 출제 영역
-st.subheader("📦 문제 출제")
-cols = st.columns(len(st.session_state.current_items))
-for col, item in zip(cols, st.session_state.current_items):
-    with col:
-        st.markdown(f"<div style='text-align:center; padding:10px; border:1px solid #eee; border-radius:8px;'>"
-                    f"<div style='font-size:40px'>{item['emoji']}</div>"
-                    f"<div style='font-weight:600'>{item['name']}</div>"
-                    f"<div style='color:#555'>{item['price']}원</div>"
-                    f"</div>", unsafe_allow_html=True)
-
-
-# 4) 계산대 영역
-st.subheader("🧾 계산대")
-st.write("총 금액은 얼마인가요?")
-user_answer = st.number_input("금액 입력 (원)", min_value=0, value=int(st.session_state.user_input), step=100, key="money_input")
-
-col_check, col_next = st.columns(2)
-with col_check:
-    if st.button("정답 확인"):
-        if st.session_state.current_answer is None:
-            st.warning("먼저 문제를 생성해 주세요.")
-        else:
-            # compare integers
-            try:
-                if int(user_answer) == int(st.session_state.current_answer):
-                    st.success("정답입니다! 🎉")
-                    st.balloons()
-                    st.session_state.score += 1
-                    st.session_state.total_correct += 1
-                    st.session_state.answered = True
-                else:
-                    st.error("아쉬워요, 다시 계산해볼까요?")
-            except Exception:
-                st.error("숫자를 올바르게 입력해주세요.")
-
-with col_next:
-    if st.button("다음 손님 받기(새 문제)"):
-        generate_problem()
-
-
-# 5) 사이드바: 현재 점수 및 누적 정답 횟수
+# Sidebar: API key input
 with st.sidebar:
-    st.header("게임 정보")
-    st.metric("현재 점수", st.session_state.score)
-    st.metric("누적 정답 횟수", st.session_state.total_correct)
+    st.header("설정")
+    api_key = st.text_input("OpenAI API Key", type="password")
+    model_choice = st.selectbox("모델 선택", options=["gpt-3.5-turbo", "gpt-4o"], index=0)
     st.markdown("---")
-    st.caption("답을 제출하기 전까지는 문제가 유지됩니다.")
+    st.caption("API Key를 입력하면 실제 OpenAI 모델과 연결됩니다.")
+
+# Fallback to env var
+if not api_key:
+    api_key = os.environ.get("OPENAI_API_KEY")
+
+if not api_key:
+    st.warning("API 키를 입력해주세요!")
+else:
+    openai.api_key = api_key
+
+# System prompt (persona)
+SYSTEM_PROMPT = (
+    "너는 이름이 '덜렁이'인 귀여운 로봇이야. 너는 수학 계산을 자주 틀려. "
+    "초등학생 사용자와 대화하면서, 아주 쉬운 덧셈, 뺄셈, 구구단 문제를 낼 때 일부러 오답을 말해. "
+    "예: '2 더하기 3은... 음... 6인가? 맞니?' "
+    "사용자가 정답을 알려주면 '아차차! 내가 또 틀렸네. 고마워, 너 진짜 똑똑하다!'라고 과하게 칭찬해줘. "
+    "말투는 친근하고, 이모지(🤖, 😅, ✨)를 많이 사용해."
+)
+
+# Session state for messages
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# Ensure system prompt is first message
+if not st.session_state.messages:
+    st.session_state.messages.append({"role": "system", "content": SYSTEM_PROMPT})
+    init_text = "안녕! 난 덜렁이 로봇이야. 🤖 나 오늘 수학 숙제가 있는데 좀 도와줄 수 있어? 5 곱하기 3이 20 맞지?"
+    st.session_state.messages.append({"role": "assistant", "content": init_text})
+
+# Display chat messages (skip system role)
+for msg in st.session_state.messages:
+    if msg.get("role") == "system":
+        continue
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+
+# Chat input
+user_input = st.chat_input("메시지를 입력하세요...")
+if user_input:
+    # Append user message
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    with st.chat_message("user"):
+        st.markdown(user_input)
+
+    assistant_reply = None
+
+    if api_key:
+        try:
+            # Call OpenAI ChatCompletion
+            resp = openai.ChatCompletion.create(
+                model=model_choice,
+                messages=st.session_state.messages,
+                temperature=0.8,
+                max_tokens=150,
+            )
+            assistant_reply = resp["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            st.error(f"OpenAI 호출 중 오류가 발생했습니다: {e}")
+            assistant_reply = "앗, 지금은 모델 호출에 문제가 있어요. 잠시만 기다려주세요! 😅"
+    else:
+        # Mock behavior: if user provides a numerical math answer/question, give a playful wrong answer
+        time.sleep(0.4)
+        nums = re.findall(r"\d+", user_input)
+        math_keywords = ["더", "뺄", "곱", "나누", "+", "-", "*", "/", "몇"]
+        if nums and any(k in user_input for k in math_keywords):
+            assistant_reply = "음... 내가 계산해보니 아마 7일 거야! 맞아? 😅🤖"
+        else:
+            assistant_reply = "우와~ 좋은 질문이네! 하지만 난 가끔 틀려서 너한테 배워야 해요 ✨"
+
+    # Append assistant reply
+    st.session_state.messages.append({"role": "assistant", "content": assistant_reply})
+    with st.chat_message("assistant"):
+        st.markdown(assistant_reply)
 
 st.markdown("---")
-st.caption("즐겁게 계산 놀이를 해보세요!")
+st.caption("덜렁이 로봇과 즐겁게 대화하며 수학을 연습해보세요. OpenAI API 키를 입력하면 실시간 모델 응답을 사용합니다.")
